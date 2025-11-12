@@ -1,7 +1,6 @@
-import pytest
 from fastapi.testclient import TestClient
 
-from src.main import app
+from catalog_api.main import app
 
 
 client = TestClient(app)
@@ -24,7 +23,7 @@ def test_movies_endpoint_returns_seeded_catalogue():
 
 
 def test_movies_endpoint_returns_404_when_empty(monkeypatch):
-    from src import main
+    from catalog_api import main
 
     def _empty_list():
         return []

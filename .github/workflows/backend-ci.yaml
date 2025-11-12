@@ -44,7 +44,7 @@ jobs:
 
       - name: Run flake8
         working-directory: ${{ env.WORKING_DIRECTORY }}
-        run: flake8 src tests
+        run: flake8 catalog_api tests
 
   test:
     name: Test backend

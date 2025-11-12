@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import List
+from dataclasses import asdict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from .repository import MovieRepository, get_repository
+from .repository import get_repository
 
 
 class Movie(BaseModel):
@@ -41,4 +42,4 @@ async def list_movies() -> List[Movie]:
     movies = repository.list_movies()
     if not movies:
         raise HTTPException(status_code=404, detail="No movies available")
-    return [Movie(**movie.dict()) for movie in movies]
+    return [Movie(**asdict(movie)) for movie in movies]
