@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: movie-portal
+  labels:
+    app: movie-portal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: movie-portal
+  template:
+    metadata:
+      labels:
+        app: movie-portal
+    spec:
+      containers:
+        - name: web
+          image: public.ecr.aws/example/movie-portal:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: MOVIE_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: movie-portal-config
+                  key: apiBaseUrl
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

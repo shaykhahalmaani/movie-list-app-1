@@ -2,94 +2,107 @@ name: Backend Continuous Integration
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "services/catalog_api/**"
+      - ".github/workflows/backend-ci.yaml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIRECTORY: services/catalog_api
 
 jobs:
   lint:
+    name: Lint backend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./starter/backend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/requirements.txt"
 
-      - name: Install pipenv
-        run: |
-          pip install pipenv
-
-      - name: Cache pipenv dependencies
-        uses: actions/cache@v3
+      - name: Restore pip cache
+        id: pip-cache
+        uses: actions/cache@v4
         with:
-          path: ~/.local/share/virtualenvs
-          key: ${{ runner.os }}-pipenv-${{ hashFiles('**/Pipfile.lock') }}
+          path: ~/.cache/pip
+          key: catalog-api-${{ runner.os }}-${{ hashFiles(format('{0}/requirements.txt', env.WORKING_DIRECTORY)) }}
           restore-keys: |
-            ${{ runner.os }}-pipenv-
+            catalog-api-${{ runner.os }}-
 
       - name: Install dependencies
-        run: |
-          pipenv install --dev
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: pip install -r requirements.txt
 
-      - name: Run lint
-        run: |
-          pipenv run lint
+      - name: Run flake8
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: flake8 src tests
 
   test:
+    name: Test backend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./starter/backend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/requirements.txt"
 
-      - name: Install pipenv
-        run: |
-          pip install pipenv
-
-      - name: Cache pipenv dependencies
-        uses: actions/cache@v3
+      - name: Restore pip cache
+        uses: actions/cache@v4
         with:
-          path: ~/.local/share/virtualenvs
-          key: ${{ runner.os }}-pipenv-${{ hashFiles('**/Pipfile.lock') }}
+          path: ~/.cache/pip
+          key: catalog-api-${{ runner.os }}-${{ hashFiles(format('{0}/requirements.txt', env.WORKING_DIRECTORY)) }}
           restore-keys: |
-            ${{ runner.os }}-pipenv-
+            catalog-api-${{ runner.os }}-
 
       - name: Install dependencies
-        run: |
-          pipenv install --dev
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: pip install -r requirements.txt
 
-      - name: Run tests
-        run: |
-          pipenv run test
+      - name: Run pytest
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: pytest
 
   build:
-    runs-on: ubuntu-latest
+    name: Build container image
     needs: [lint, test]
-    defaults:
-      run:
-        working-directory: ./starter/backend
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/requirements.txt"
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: catalog-api-${{ runner.os }}-${{ hashFiles(format('{0}/requirements.txt', env.WORKING_DIRECTORY)) }}
+          restore-keys: |
+            catalog-api-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: pip install -r requirements.txt
+
+      - name: Build docker image
         run: |
-          docker build -t backend:latest .
-
-      - name: Verify Docker image
-        run: |
-          docker images | grep backend
-
+          docker build -t movie-backend:ci services/catalog_api

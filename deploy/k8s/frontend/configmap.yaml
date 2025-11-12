@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: movie-portal-config
+  labels:
+    app: movie-portal
+data:
+  apiBaseUrl: "https://catalog-api.example.com"

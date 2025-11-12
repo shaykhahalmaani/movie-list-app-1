@@ -2,86 +2,113 @@ name: Frontend Continuous Integration
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "interfaces/movie_portal/**"
+      - ".github/workflows/frontend-ci.yaml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WORKING_DIRECTORY: interfaces/movie_portal
 
 jobs:
   lint:
+    name: Lint frontend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./starter/frontend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/package-lock.json"
 
-      - name: Cache node modules
-        uses: actions/cache@v3
+      - name: Restore npm cache
+        id: frontend-cache
+        uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: movie-portal-${{ runner.os }}-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            movie-portal-${{ runner.os }}-
 
       - name: Install dependencies
-        run: |
-          npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm install
 
-      - name: Run lint
-        run: |
-          npm run lint
+      - name: Run ESLint
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run lint
 
   test:
+    name: Test frontend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./starter/frontend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/package-lock.json"
 
-      - name: Cache node modules
-        uses: actions/cache@v3
+      - name: Restore npm cache
+        uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: movie-portal-${{ runner.os }}-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            movie-portal-${{ runner.os }}-
 
       - name: Install dependencies
-        run: |
-          npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm install
 
-      - name: Run tests
-        run: |
-          npm test -- --watchAll=false --passWithNoTests
+      - name: Run test suite
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run test -- --run
 
   build:
-    runs-on: ubuntu-latest
+    name: Build container image
     needs: [lint, test]
-    defaults:
-      run:
-        working-directory: ./starter/frontend
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Build Docker image
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/package-lock.json"
+
+      - name: Restore npm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: movie-portal-${{ runner.os }}-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
+          restore-keys: |
+            movie-portal-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm install
+
+      - name: Re-run unit tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run test -- --run
+
+      - name: Build docker image
         run: |
-          docker build --build-arg REACT_APP_MOVIE_API_URL=http://localhost:5000 -t frontend:latest .
-
-      - name: Verify Docker image
-        run: |
-          docker images | grep frontend
-
+          docker build \
+            --build-arg REACT_APP_MOVIE_API_URL=${{ secrets.MOVIE_API_URL }} \
+            -t movie-frontend:ci interfaces/movie_portal

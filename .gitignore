@@ -1,59 +1,29 @@
-# Dependencies
+# Node
 node_modules/
-.pnp
-.pnp.js
-
-# Testing
+.pnpm-store/
 coverage/
-
-# Production
-build/
 dist/
-
-# Misc
-.DS_Store
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-*.log
+.vite/
+frontend-build/
 
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.venv
-pip-log.txt
-pip-delete-this-directory.txt
-.pytest_cache/
-.coverage
-htmlcov/
+*.pyc
+.venv/
+.env
 
 # Terraform
 *.tfstate
 *.tfstate.*
-*.tfvars
 .terraform/
 .terraform.lock.hcl
 
-# IDE
-.vscode/
+# MacOS
+.DS_Store
+
+# Editor
 .idea/
-*.swp
-*.swo
-*~
+.vscode/
 
-# OS
-Thumbs.db
-
+# Kubernetes generated manifests
+*.kubeconfig

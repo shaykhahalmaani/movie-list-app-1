@@ -2,131 +2,146 @@ name: Frontend Continuous Deployment
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - "interfaces/movie_portal/**"
+      - "deploy/k8s/frontend/**"
+      - ".github/workflows/frontend-cd.yaml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
-  AWS_REGION: us-east-1
-  EKS_CLUSTER_NAME: cluster
+  WORKING_DIRECTORY: interfaces/movie_portal
+  IMAGE_NAME: movie-portal
 
 jobs:
   lint:
+    name: Lint web client
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./starter/frontend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/package-lock.json"
 
-      - name: Cache node modules
-        uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: movie-portal-${{ runner.os }}-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            movie-portal-${{ runner.os }}-
 
       - name: Install dependencies
-        run: |
-          npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm install
 
-      - name: Run lint
-        run: |
-          npm run lint
+      - name: Run ESLint
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run lint
 
   test:
+    name: Test web client
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./starter/frontend
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/package-lock.json"
 
-      - name: Cache node modules
-        uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: movie-portal-${{ runner.os }}-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            movie-portal-${{ runner.os }}-
 
       - name: Install dependencies
-        run: |
-          npm ci
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm install
 
-      - name: Run tests
-        run: |
-          npm test -- --watchAll=false --passWithNoTests
+      - name: Run unit tests
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run test -- --run
 
-  build-and-deploy:
+  deploy:
+    name: Build and deploy web client
     runs-on: ubuntu-latest
     needs: [lint, test]
-    defaults:
-      run:
-        working-directory: ./starter/frontend
+    environment: production
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "${{ env.WORKING_DIRECTORY }}/package-lock.json"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: movie-portal-${{ runner.os }}-${{ hashFiles(format('{0}/package-lock.json', env.WORKING_DIRECTORY)) }}
+          restore-keys: |
+            movie-portal-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm install
+
+      - name: Build static bundle
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: npm run build
+        env:
+          VITE_MOVIE_API_URL: ${{ secrets.MOVIE_API_URL }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push Docker image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: frontend
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
           IMAGE_TAG: ${{ github.sha }}
-          REACT_APP_MOVIE_API_URL: ${{ secrets.REACT_APP_MOVIE_API_URL }}
+          MOVIE_API_URL: ${{ secrets.MOVIE_API_URL }}
         run: |
-          docker build --build-arg REACT_APP_MOVIE_API_URL=$REACT_APP_MOVIE_API_URL \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "IMAGE=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+          docker build \
+            --build-arg REACT_APP_MOVIE_API_URL=${MOVIE_API_URL} \
+            -t ${REGISTRY}/${REPOSITORY}:${IMAGE_TAG} \
+            -t ${REGISTRY}/${REPOSITORY}:latest \
+            ${WORKING_DIRECTORY}
+          docker push ${REGISTRY}/${REPOSITORY}:${IMAGE_TAG}
+          docker push ${REGISTRY}/${REPOSITORY}:latest
 
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
 
-      - name: Deploy to Kubernetes
+      - name: Deploy manifests
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: frontend
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          cd k8s
-          
-          # Update image using kustomize
-          kustomize edit set image frontend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          
-          # Apply using kustomize
-          kustomize build . | kubectl apply -f -
-          
-          # Wait for deployment to complete
-          kubectl rollout status deployment/frontend
-          
-          # Verify deployment
-          kubectl get pods -l app=frontend
-          kubectl get services frontend
-
+          kubectl apply -n ${{ secrets.KUBE_NAMESPACE }} -f deploy/k8s/frontend/configmap.yaml
+          kubectl apply -n ${{ secrets.KUBE_NAMESPACE }} -f deploy/k8s/frontend/service.yaml
+          kubectl apply -n ${{ secrets.KUBE_NAMESPACE }} -f deploy/k8s/frontend/deployment.yaml
+          kubectl set image deployment/movie-portal web=${REGISTRY}/${REPOSITORY}:${IMAGE_TAG} -n ${{ secrets.KUBE_NAMESPACE }}
+          kubectl rollout status deployment/movie-portal -n ${{ secrets.KUBE_NAMESPACE }}
